@@ -1,6 +1,6 @@
 {
   "name": "@tryghost/identity-token-service",
-  "version": "0.0.0",
+  "version": "5.108.1",
   "repository": "https://github.com/TryGhost/Ghost/tree/main/packages/identity-token-service",
   "author": "Ghost Foundation",
   "private": true,
