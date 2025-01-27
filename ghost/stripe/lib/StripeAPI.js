@@ -474,6 +474,7 @@ module.exports = class StripeAPI {
             cancel_url: options.cancelUrl || this._config.checkoutSessionCancelUrl,
             // @ts-ignore - we need to update to latest stripe library to correctly use newer features
             allow_promotion_codes: discounts ? undefined : this._config.enablePromoCodes,
+            billing_address_collection: 'required',
             automatic_tax: {
                 enabled: this._config.enableAutomaticTax
             },
