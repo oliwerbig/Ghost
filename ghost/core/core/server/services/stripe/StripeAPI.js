@@ -86,7 +86,7 @@ module.exports = class StripeAPI {
 
     /**
      * Returns true if this package is running in a test environment (i.e. browser tests).
-     * 
+     *
      * Note: This is not the same as the Stripe API's test mode.
      * @returns {boolean}
      */
@@ -96,7 +96,7 @@ module.exports = class StripeAPI {
 
     /**
      * Returns the Stripe API mode (test or live).
-     * 
+     *
      * @returns {string}
      */
     get mode() {
@@ -108,9 +108,9 @@ module.exports = class StripeAPI {
      * - Instantiates the Stripe API client
      * - Sets the Stripe API mode
      * - Configures rate limiting buckets
-     * 
+     *
      * @param {IStripeAPIConfig} config
-     * 
+     *
      * @returns {void}
      */
     configure(config) {
@@ -139,9 +139,9 @@ module.exports = class StripeAPI {
 
     /**
      * Create a new Stripe Coupon.
-     * 
+     *
      * @param {ICouponCreateParams} options
-     * 
+     *
      * @returns {Promise<ICoupon>}
      */
     async createCoupon(options) {
@@ -179,7 +179,7 @@ module.exports = class StripeAPI {
 
     /**
      * Create a new Stripe Price.
-     * 
+     *
      * @param {object} options
      * @param {string} options.product
      * @param {boolean} options.active
@@ -212,7 +212,7 @@ module.exports = class StripeAPI {
 
     /**
      * Update the Stripe Price object by ID.
-     * 
+     *
      * @param {string} id
      * @param {object} options
      * @param {boolean} [options.active]
@@ -232,7 +232,7 @@ module.exports = class StripeAPI {
 
     /**
      * Update the Stripe Product object by ID.
-     * 
+     *
      * @param {string} id
      * @param {object} options
      * @param {string} options.name
@@ -250,7 +250,7 @@ module.exports = class StripeAPI {
 
     /**
      * Retrieve the Stripe Customer object by ID.
-     * 
+     *
      * @param {string} id
      * @param {ICustomerRetrieveParams} options
      *
@@ -277,7 +277,7 @@ module.exports = class StripeAPI {
 
     /**
      * Finds or creates a Stripe Customer for a Member.
-     * 
+     *
      * @deprecated
      * @param {any} member
      *
@@ -361,7 +361,7 @@ module.exports = class StripeAPI {
 
     /**
      * Create a new Stripe Customer.
-     * 
+     *
      * @param {import('stripe').Stripe.CustomerCreateParams} options
      *
      * @returns {Promise<ICustomer>}
@@ -381,7 +381,7 @@ module.exports = class StripeAPI {
 
     /**
      * Update the email address for a Stripe Customer.
-     * 
+     *
      * @param {string} id
      * @param {string} email
      *
@@ -427,7 +427,7 @@ module.exports = class StripeAPI {
 
     /**
      * Delete a Stripe Webhook Endpoint by ID.
-     * 
+     *
      * @param {string} id
      *
      * @returns {Promise<void>}
@@ -447,7 +447,7 @@ module.exports = class StripeAPI {
 
     /**
      * Update a Stripe Webhook Endpoint by ID and URL.
-     * 
+     *
      * @param {string} id
      * @param {string} url
      * @param {import('stripe').Stripe.WebhookEndpointUpdateParams.EnabledEvent[]} events
@@ -496,7 +496,7 @@ module.exports = class StripeAPI {
 
     /**
      * Create a new Stripe Checkout Session for a new subscription.
-     * 
+     *
      * @param {string} priceId
      * @param {ICustomer} customer
      *
@@ -556,6 +556,7 @@ module.exports = class StripeAPI {
             cancel_url: options.cancelUrl || this._config.checkoutSessionCancelUrl,
             // @ts-ignore - we need to update to latest stripe library to correctly use newer features
             allow_promotion_codes: discounts ? undefined : this._config.enablePromoCodes,
+            billing_address_collection: 'required',
             automatic_tax: {
                 enabled: this._config.enableAutomaticTax
             },
@@ -593,7 +594,7 @@ module.exports = class StripeAPI {
 
     /**
      * Create a new Stripe Checkout Session for a donation.
-     * 
+     *
      * @param {object} options
      * @param {string} options.priceId
      * @param {string} options.successUrl
@@ -623,6 +624,7 @@ module.exports = class StripeAPI {
             mode: 'payment',
             success_url: successUrl || this._config.checkoutSessionSuccessUrl,
             cancel_url: cancelUrl || this._config.checkoutSessionCancelUrl,
+            billing_address_collection: 'required',
             automatic_tax: {
                 enabled: this._config.enableAutomaticTax
             },
@@ -668,7 +670,7 @@ module.exports = class StripeAPI {
 
     /**
      * Create a new Stripe Checkout Setup Session.
-     * 
+     *
      * @param {ICustomer} customer
      * @param {object} options
      * @param {string} options.successUrl
@@ -683,6 +685,7 @@ module.exports = class StripeAPI {
             payment_method_types: this.PAYMENT_METHOD_TYPES,
             success_url: options.successUrl || this._config.checkoutSetupSessionSuccessUrl,
             cancel_url: options.cancelUrl || this._config.checkoutSetupSessionCancelUrl,
+            billing_address_collection: 'required',
             customer_email: customer.email,
             setup_intent_data: {
                 metadata: {
@@ -701,7 +704,7 @@ module.exports = class StripeAPI {
 
     /**
      * Get the Stripe public key.
-     * 
+     *
      * @returns {string}
      */
     getPublicKey() {
@@ -765,7 +768,7 @@ module.exports = class StripeAPI {
 
     /**
      * Cancel the Stripe Subscription at the end of the current period by ID.
-     * 
+     *
      * @param {string} id - The ID of the Subscription to modify
      * @param {string} [reason=''] - The user defined cancellation reason
      *
@@ -784,7 +787,7 @@ module.exports = class StripeAPI {
 
     /**
      * Continue the Stripe Subscription at the end of the current period by ID.
-     * 
+     *
      * @param {string} id - The ID of the Subscription to modify
      *
      * @returns {Promise<ISubscription>}
@@ -802,7 +805,7 @@ module.exports = class StripeAPI {
 
     /**
      * Remove the coupon from the Stripe Subscription by ID.
-     * 
+     *
      * @param {string} id - The ID of the subscription to remove coupon from
      *
      * @returns {Promise<ISubscription>}
@@ -816,9 +819,9 @@ module.exports = class StripeAPI {
     }
 
     /**
-     * Update the price of the Stripe SubscriptionItem by Subscription ID, 
+     * Update the price of the Stripe SubscriptionItem by Subscription ID,
      * SubscriptionItem ID, and Price ID.
-     * 
+     *
      * @param {string} subscriptionId - The ID of the Subscription to modify
      * @param {string} id - The ID of the SubscriptionItem
      * @param {string} price - The ID of the new Price
@@ -846,7 +849,7 @@ module.exports = class StripeAPI {
 
     /**
      * Create a new Stripe Subscription for a Customer by ID and Price ID.
-     * 
+     *
      * @param {string} customer - The ID of the Customer to create the subscription for
      * @param {string} price - The ID of the new Price
      *
@@ -863,7 +866,7 @@ module.exports = class StripeAPI {
 
     /**
      * Retrieve the Stripe SetupIntent object by ID.
-     * 
+     *
      * @param {string} id
      * @param {import('stripe').Stripe.SetupIntentRetrieveParams} options
      *
@@ -876,7 +879,7 @@ module.exports = class StripeAPI {
 
     /**
      * Attach a PaymentMethod to a Customer
-     * 
+     *
      * @param {string} customer
      * @param {string} paymentMethod
      *
@@ -890,7 +893,7 @@ module.exports = class StripeAPI {
 
     /**
      * Retrieve the Stripe PaymentMethod object by ID.
-     * 
+     *
      * @param {string} id
      *
      * @returns {Promise<import('stripe').Stripe.PaymentMethod|null>}
@@ -907,7 +910,7 @@ module.exports = class StripeAPI {
 
     /**
      * Update the default PaymentMethod for a Subscription.
-     * 
+     *
      * @param {string} subscription
      * @param {string} paymentMethod
      *
@@ -922,7 +925,7 @@ module.exports = class StripeAPI {
 
     /**
      * Cancel the trial for a Stripe Subscription by ID.
-     * 
+     *
      * @param {string} id - The ID of the subscription to cancel the trial for
      *
      * @returns {Promise<ISubscription>}
