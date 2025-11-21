@@ -1,0 +1,81 @@
+name: Deploy to SFTP
+
+on:
+  push:
+    branches:
+      - main  # vagy bármelyik branch, amit szeretnél deployolni
+  workflow_dispatch:  # Manuális trigger lehetősége
+
+env:
+  FORCE_COLOR: 1
+  NODE_VERSION: 22.13.1
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy Ghost
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build Ghost
+        run: yarn build
+
+      - name: Prepare deployment package
+        run: |
+          # Új könyvtár létrehozása a csomagnak
+          mkdir -p ghost-deployment
+
+          # Ghost core fájlok másolása
+          cp -r ghost/core/core ghost-deployment/
+          cp -r ghost/core/content ghost-deployment/
+          cp ghost/core/package.json ghost-deployment/
+          cp ghost/core/yarn.lock ghost-deployment/
+
+          # Ghost admin build másolása
+          mkdir -p ghost-deployment/core/built
+          cp -r ghost/admin/dist/* ghost-deployment/core/built/
+
+          # Admin-x apps másolása
+          if [ -d "ghost/core/core/built/admin" ]; then
+            cp -r ghost/core/core/built/admin ghost-deployment/core/built/
+          fi
+
+          # i18n fájlok másolása
+          cp -r ghost/i18n ghost-deployment/
+
+          # Szükséges config fájlok
+          echo "ghost-deployment csomag elkészült"
+
+      - name: Create deployment archive
+        run: |
+          cd ghost-deployment
+          zip -r ../ghost-deployment.zip .
+          cd ..
+          echo "Archive size: $(du -h ghost-deployment.zip | cut -f1)"
+
+      - name: Upload to SFTP
+        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+        with:
+          server: ${{ secrets.SFTP_HOST }}
+          username: ${{ secrets.SFTP_USERNAME }}
+          password: ${{ secrets.SFTP_PASSWORD }}
+          port: ${{ secrets.SFTP_PORT || 22 }}
+          local_path: './ghost-deployment.zip'
+          remote_path: ${{ secrets.SFTP_REMOTE_PATH || '/tmp' }}
+          sftp_only: true
+

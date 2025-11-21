@@ -1,0 +1,116 @@
+name: Simple Deploy to Production
+
+on:
+  workflow_dispatch:  # Csak manuális indítás
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  NODE_VERSION: 22.13.1
+
+jobs:
+  deploy:
+    name: Deploy Ghost to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+
+      - name: Install and build
+        run: |
+          yarn install --frozen-lockfile
+          yarn build
+
+      - name: Create deployment package
+        run: |
+          mkdir deploy
+
+          # Core files
+          cp -r ghost/core/{core,content,package.json,yarn.lock} deploy/
+
+          # Built admin
+          mkdir -p deploy/core/built
+          if [ -d "ghost/admin/dist" ]; then
+            cp -r ghost/admin/dist/* deploy/core/built/
+          fi
+
+          # Admin-x apps
+          if [ -d "ghost/core/core/built/admin" ]; then
+            cp -r ghost/core/core/built/admin deploy/core/built/
+          fi
+
+          # Create archive
+          cd deploy && zip -r ../ghost.zip . && cd ..
+          echo "Package size: $(du -h ghost.zip)"
+
+      - name: Deploy via SFTP and SSH
+        env:
+          DEPLOY_HOST: ${{ secrets[format('{0}_HOST', inputs.environment)] || secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets[format('{0}_USER', inputs.environment)] || secrets.DEPLOY_USER }}
+          DEPLOY_PASSWORD: ${{ secrets[format('{0}_PASSWORD', inputs.environment)] || secrets.DEPLOY_PASSWORD }}
+          DEPLOY_PATH: ${{ secrets[format('{0}_PATH', inputs.environment)] || secrets.DEPLOY_PATH || '/var/www/ghost' }}
+        run: |
+          # Install SFTP client
+          sudo apt-get update && sudo apt-get install -y sshpass lftp
+
+          echo "Uploading to $DEPLOY_HOST:$DEPLOY_PATH"
+
+          # Upload via SFTP
+          sshpass -p "$DEPLOY_PASSWORD" sftp -o StrictHostKeyChecking=no \
+            "$DEPLOY_USER@$DEPLOY_HOST" << EOF
+          cd /tmp
+          put ghost.zip
+          bye
+          EOF
+
+          # Deploy via SSH
+          sshpass -p "$DEPLOY_PASSWORD" ssh -o StrictHostKeyChecking=no \
+            "$DEPLOY_USER@$DEPLOY_HOST" << 'ENDSSH'
+          set -e
+          cd $DEPLOY_PATH
+
+          echo "Stopping Ghost..."
+          ghost stop || true
+
+          echo "Backup current version..."
+          mkdir -p backups
+          tar -czf backups/backup-$(date +%Y%m%d-%H%M%S).tar.gz current/ 2>/dev/null || true
+
+          echo "Extracting new version..."
+          rm -rf current/core
+          unzip -o /tmp/ghost.zip -d current/
+
+          echo "Installing dependencies..."
+          cd current
+          yarn install --production
+
+          echo "Running migrations..."
+          cd ..
+          ghost update --force --no-restart || true
+
+          echo "Starting Ghost..."
+          ghost start
+
+          rm -f /tmp/ghost.zip
+          echo "Deployment complete!"
+          ghost status
+          ENDSSH
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ghost.zip
