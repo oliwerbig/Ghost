@@ -44,7 +44,7 @@ jobs:
           cp -r ghost/core/core ghost-deployment/
           cp -r ghost/core/content ghost-deployment/
           cp ghost/core/package.json ghost-deployment/
-          cp ghost/core/yarn.lock ghost-deployment/
+          cp yarn.lock ghost-deployment/
 
           # Ghost admin build másolása
           mkdir -p ghost-deployment/core/built
