@@ -14,6 +14,7 @@ jobs:
   build-and-deploy:
     name: Build and Deploy Ghost
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 60
 
     steps:
@@ -77,4 +78,11 @@ jobs:
           port: ${{ secrets.SFTP_PORT || 22 }}
           source: "ghost-deployment.zip"
           target: ${{ secrets.SFTP_REMOTE_PATH || '/tmp' }}
+
+      - name: Debug Secrets
+        run: |
+          echo "Checking if secrets are available..."
+          if [ -n "${{ secrets.SFTP_HOST }}" ]; then echo "SFTP_HOST is set"; else echo "SFTP_HOST is NOT set"; fi
+          if [ -n "${{ secrets.SFTP_USERNAME }}" ]; then echo "SFTP_USERNAME is set"; else echo "SFTP_USERNAME is NOT set"; fi
+          if [ -n "${{ secrets.SFTP_PASSWORD }}" ]; then echo "SFTP_PASSWORD is set"; else echo "SFTP_PASSWORD is NOT set"; fi
 
