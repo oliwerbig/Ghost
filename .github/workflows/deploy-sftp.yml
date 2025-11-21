@@ -69,13 +69,12 @@ jobs:
           echo "Archive size: $(du -h ghost-deployment.zip | cut -f1)"
 
       - name: Upload to SFTP
-        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+        uses: appleboy/scp-action@v0.1.7
         with:
-          server: ${{ secrets.SFTP_HOST }}
+          host: ${{ secrets.SFTP_HOST }}
           username: ${{ secrets.SFTP_USERNAME }}
           password: ${{ secrets.SFTP_PASSWORD }}
           port: ${{ secrets.SFTP_PORT || 22 }}
-          local_path: './ghost-deployment.zip'
-          remote_path: ${{ secrets.SFTP_REMOTE_PATH || '/tmp' }}
-          sftp_only: true
+          source: "ghost-deployment.zip"
+          target: ${{ secrets.SFTP_REMOTE_PATH || '/tmp' }}
 
