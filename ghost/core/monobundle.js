@@ -164,8 +164,7 @@ function getWorkspaces(from) {
 
     const filesToCopy = [
         'README.md',
-        'LICENSE',
-        'yarn.lock'
+        'LICENSE'
     ];
 
     for (const file of filesToCopy) {
