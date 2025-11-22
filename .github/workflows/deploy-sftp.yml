@@ -34,7 +34,11 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Build Ghost
-        run: yarn build
+        run: |
+          yarn build
+          # Explicitly build ghost core (TypeScript and Assets) as it has no 'build' script
+          yarn workspace ghost run build:tsc
+          yarn workspace ghost run build:assets
 
       - name: Create Release Package
         run: |
