@@ -36,31 +36,24 @@ jobs:
       - name: Build Ghost
         run: yarn build
 
-      - name: Prepare deployment package
+      - name: Create Release Package
         run: |
-          # Új könyvtár létrehozása a csomagnak
-          mkdir -p ghost-deployment
+          cd ghost/core
+          # npm pack will run prepack (monobundle.js) automatically
+          # This bundles workspace dependencies and updates package.json
+          npm pack
 
-          # Ghost core fájlok másolása
-          cp -r ghost/core/core ghost-deployment/
-          cp -r ghost/core/content ghost-deployment/
-          cp ghost/core/package.json ghost-deployment/
-          cp yarn.lock ghost-deployment/
+          # The file will be named ghost-x.y.z.tgz. Find it.
+          TGZ_FILE=$(ls ghost-*.tgz)
+          echo "Packed file: $TGZ_FILE"
 
-          # Ghost admin build másolása
-          mkdir -p ghost-deployment/core/built
-          cp -r ghost/admin/dist/* ghost-deployment/core/built/
+          # Extract it to a temporary directory
+          mkdir -p ../../ghost-deployment
+          tar -xzf $TGZ_FILE -C ../../ghost-deployment --strip-components=1
 
-          # Admin-x apps másolása
-          if [ -d "ghost/core/core/built/admin" ]; then
-            cp -r ghost/core/core/built/admin ghost-deployment/core/built/
-          fi
-
-          # i18n fájlok másolása
-          cp -r ghost/i18n ghost-deployment/
-
-          # Szükséges config fájlok
-          echo "ghost-deployment csomag elkészült"
+          # Verify package.json in deployment has resolved workspace deps
+          echo "Verifying @tryghost/i18n dependency in package.json:"
+          grep "@tryghost/i18n" ../../ghost-deployment/package.json
 
       - name: Create deployment archive
         run: |
