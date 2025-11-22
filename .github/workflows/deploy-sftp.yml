@@ -81,10 +81,35 @@ jobs:
           source: "ghost-deployment.zip"
           target: ${{ secrets.SFTP_REMOTE_PATH || '/tmp' }}
 
-      - name: Debug Secrets
-        run: |
-          echo "Checking if secrets are available..."
-          if [ -n "${{ secrets.SFTP_HOST }}" ]; then echo "SFTP_HOST is set"; else echo "SFTP_HOST is NOT set"; fi
-          if [ -n "${{ secrets.SFTP_USERNAME }}" ]; then echo "SFTP_USERNAME is set"; else echo "SFTP_USERNAME is NOT set"; fi
-          if [ -n "${{ secrets.SFTP_PASSWORD }}" ]; then echo "SFTP_PASSWORD is set"; else echo "SFTP_PASSWORD is NOT set"; fi
+      - name: Execute Remote Update
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SFTP_HOST }}
+          username: ${{ secrets.SFTP_USERNAME }}
+          password: ${{ secrets.SFTP_PASSWORD }}
+          port: ${{ secrets.SFTP_PORT || 22 }}
+          script: |
+            # Navigate to the deployment directory
+            TARGET_DIR="${{ secrets.SFTP_REMOTE_PATH }}"
+            if [ -z "$TARGET_DIR" ]; then
+              echo "Error: SFTP_REMOTE_PATH secret is not set. Cannot determine deployment directory."
+              exit 1
+            fi
+
+            cd "$TARGET_DIR"
+
+            echo "Unzipping update..."
+            unzip -o ghost-deployment.zip
+
+            echo "Removing old lockfile..."
+            rm -f yarn.lock
+
+            echo "Installing dependencies..."
+            # Using --ignore-engines to bypass Node 22 incompatibility with some packages
+            yarn install --ignore-engines
+
+            echo "Restarting Ghost..."
+            # Ensure ghost command is found (add common paths)
+            export PATH=$PATH:/usr/local/bin:/usr/bin:/bin
+            ghost restart
 
