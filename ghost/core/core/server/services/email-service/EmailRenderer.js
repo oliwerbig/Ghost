@@ -12,6 +12,7 @@ const htmlToPlaintext = require('@tryghost/html-to-plaintext');
 const EmailAddressParser = require('../email-address/EmailAddressParser');
 const {registerHelpers} = require('./helpers/register-helpers');
 const crypto = require('crypto');
+const entities = require('entities');
 
 const DEFAULT_LOCALE = 'en-gb';
 const DEFAULT_ACCENT_COLOR = '#15212A';
@@ -1252,12 +1253,12 @@ class EmailRenderer {
             html,
 
             post: {
-                title: post.get('title'),
+                title: entities.decodeHTML(post.get('title')),
                 url: postUrl,
                 commentUrl: commentUrl.href,
                 authors,
                 publishedAt,
-                customExcerpt: post.get('custom_excerpt'),
+                customExcerpt: post.get('custom_excerpt') ? entities.decodeHTML(post.get('custom_excerpt')) : null,
                 feature_image: postFeatureImage,
                 feature_image_width: postFeatureImageWidth,
                 feature_image_height: postFeatureImageHeight,
@@ -1266,7 +1267,7 @@ class EmailRenderer {
             },
 
             newsletter: {
-                name: newsletter.get('name'),
+                name: entities.decodeHTML(newsletter.get('name')),
                 showPostTitleSection: newsletter.get('show_post_title_section'),
                 showExcerpt: newsletter.get('show_excerpt'),
                 showCommentCta: newsletter.get('show_comment_cta') && this.#settingsCache.get('comments_enabled') !== 'off' && !hasEmailOnlyFlag,
