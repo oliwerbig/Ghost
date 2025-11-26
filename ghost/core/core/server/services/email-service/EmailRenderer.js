@@ -69,7 +69,7 @@ function escapeRegExp(string) {
 // This aids with lazyloading the cheerio dependency
 function cheerioLoad(html) {
     const cheerio = require('cheerio');
-    return cheerio.load(html);
+    return cheerio.load(html, {decodeEntities: false});
 }
 
 /**
