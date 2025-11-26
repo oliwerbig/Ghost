@@ -1241,7 +1241,7 @@ class EmailRenderer {
 
         const data = {
             site: {
-                title: this.#settingsCache.get('title'),
+                title: entities.decodeHTML(this.#settingsCache.get('title')),
                 url: this.#urlUtils.urlFor('home', true),
                 iconUrl: this.#settingsCache.get('icon') ?
                     this.#urlUtils.urlFor('image', {
@@ -1250,7 +1250,7 @@ class EmailRenderer {
             },
             preheader: this.#getEmailPreheader(post, segment, html),
             preheaderSpacing: `${'&#8199;&#847; '.repeat(150)}${'&shy; '.repeat(200)} &nbsp;`,
-            html,
+            html: entities.decodeHTML(html),
 
             post: {
                 title: entities.decodeHTML(post.get('title')),
@@ -1313,7 +1313,7 @@ class EmailRenderer {
             showHeaderTitle: newsletter.get('show_header_title'),
             showHeaderName: newsletter.get('show_header_name'),
             showFeatureImage: showFeatureImage,
-            footerContent: newsletter.get('footer_content'),
+            footerContent: newsletter.get('footer_content') ? entities.decodeHTML(newsletter.get('footer_content')) : null,
             linkStyle,
             hasOutlineButtons,
 
