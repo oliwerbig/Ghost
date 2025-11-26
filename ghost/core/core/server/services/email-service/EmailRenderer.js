@@ -1164,9 +1164,9 @@ class EmailRenderer {
         const postAuthors = await post.getLazyRelation('authors');
         if (postAuthors?.models) {
             if (postAuthors.models.length <= 2) {
-                authors = postAuthors.models.map(author => author.get('name')).join(' & ');
+                authors = postAuthors.models.map(author => entities.decodeHTML(author.get('name'))).join(' & ');
             } else {
-                authors = `${postAuthors.models[0].get('name')} & ${postAuthors.models.length - 1} others`;
+                authors = `${entities.decodeHTML(postAuthors.models[0].get('name'))} & ${postAuthors.models.length - 1} others`;
             }
         }
 
