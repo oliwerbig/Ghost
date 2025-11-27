@@ -1249,7 +1249,7 @@ class EmailRenderer {
                     }, true) : null
             },
             preheader: this.#getEmailPreheader(post, segment, html),
-            preheaderSpacing: `${'&#8199;&#847; '.repeat(150)}${'&shy; '.repeat(200)} &#160;`,
+            preheaderSpacing: `${'\u2007\u2063 '.repeat(150)}${'\u00AD '.repeat(200)} \u00A0`,
             html: entities.decodeHTML(html),
 
             post: {
