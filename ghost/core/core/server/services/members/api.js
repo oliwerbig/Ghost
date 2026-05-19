@@ -10,7 +10,7 @@ const signupEmail = require('./emails/signup');
 const signupPaidEmail = require('./emails/signup-paid');
 const subscribeEmail = require('./emails/subscribe');
 const updateEmail = require('./emails/update-email');
-const SingleUseTokenProvider = require('./SingleUseTokenProvider');
+const SingleUseTokenProvider = require('./single-use-token-provider');
 const urlUtils = require('../../../shared/url-utils');
 const labsService = require('../../../shared/labs');
 const offersService = require('../offers');
@@ -18,6 +18,9 @@ const tiersService = require('../tiers');
 const newslettersService = require('../newsletters');
 const memberAttributionService = require('../member-attribution');
 const emailSuppressionList = require('../email-suppression-list');
+const commentsService = require('../comments');
+const emailAddressService = require('../email-address');
+const giftService = require('../gifts');
 const {t} = require('../i18n');
 const sentry = require('../../../shared/sentry');
 
@@ -238,7 +241,11 @@ function createApiInstance(config) {
             Comment: models.Comment,
             MemberFeedback: models.MemberFeedback,
             EmailSpamComplaintEvent: models.EmailSpamComplaintEvent,
-            Outbox: models.Outbox
+            Outbox: models.Outbox,
+            Automation: models.Automation,
+            WelcomeEmailAutomationRun: models.WelcomeEmailAutomationRun,
+            AutomatedEmailRecipient: models.AutomatedEmailRecipient,
+            Gift: models.Gift
         },
         stripeAPIService: stripeService.api,
         tiersService: tiersService,
@@ -250,7 +257,10 @@ function createApiInstance(config) {
         settingsCache,
         sentry,
         settingsHelpers,
-        urlUtils
+        urlUtils,
+        commentsService,
+        emailAddressService: emailAddressService.service,
+        giftService
     });
 
     return membersApiInstance;

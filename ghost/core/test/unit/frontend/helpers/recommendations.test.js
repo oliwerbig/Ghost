@@ -1,12 +1,12 @@
-const should = require('should');
+const assert = require('node:assert/strict');
 const sinon = require('sinon');
-const models = require('../../../../core/server/models');
 const api = require('../../../../core/server/api').endpoints;
 const hbs = require('../../../../core/frontend/services/theme-engine/engine');
-const configUtils = require('../../../utils/configUtils');
+const configUtils = require('../../../utils/config-utils');
 const {html} = require('common-tags');
 const loggingLib = require('@tryghost/logging');
 const proxy = require('../../../../core/frontend/services/proxy');
+const {promisify} = require('node:util');
 
 const recommendations = require('../../../../core/frontend/helpers/recommendations');
 const foreach = require('../../../../core/frontend/helpers/foreach');
@@ -20,14 +20,13 @@ function trimSpaces(string) {
 describe('{{#recommendations}} helper', function () {
     let logging;
 
-    before(function () {
-        models.init();
-
+    before(async function () {
         hbs.express4({
             partialsDir: [configUtils.config.get('paths').helperTemplates]
         });
 
-        hbs.cachePartials();
+        const cachePartials = promisify(hbs.cachePartials.bind(hbs));
+        await cachePartials();
 
         // The recommendation template expects this helper
         hbs.registerHelper('foreach', foreach);
@@ -65,8 +64,6 @@ describe('{{#recommendations}} helper', function () {
             'recommendations'
         );
 
-        response.should.be.an.Object().with.property('string');
-
         const expected = html`
         <ul class="recommendations">
             <li class="recommendation">
@@ -91,6 +88,8 @@ describe('{{#recommendations}} helper', function () {
             </li>
         </ul>
         `;
+
+        assert(response !== null && typeof response === 'object');
         const actual = response.string;
 
         // Uncomment to debug
@@ -99,7 +98,7 @@ describe('{{#recommendations}} helper', function () {
         // console.log('Actual:');
         // console.log(actual);
 
-        trimSpaces(actual).should.equal(trimSpaces(expected));
+        assert.equal(trimSpaces(actual), trimSpaces(expected));
     });
 
     describe('when there are no recommendations', function () {
@@ -123,8 +122,8 @@ describe('{{#recommendations}} helper', function () {
             );
 
             // No HTML is rendered
-            response.should.be.an.Object().with.property('string');
-            response.string.should.equal('');
+            assert(response !== null && typeof response === 'object');
+            assert.equal(response.string, '');
         });
     });
 
@@ -140,12 +139,14 @@ describe('{{#recommendations}} helper', function () {
             );
 
             // No HTML is rendered
-            response.should.be.an.Object().with.property('string');
-            response.string.should.equal('');
+            assert(response !== null && typeof response === 'object');
+            assert.equal(response.string, '');
         });
     });
 
     describe('when timeout is exceeded', function () {
+        let clock;
+
         before(function () {
             sinon.stub(api, 'recommendationsPublic').get(() => {
                 return {
@@ -159,6 +160,15 @@ describe('{{#recommendations}} helper', function () {
                 };
             });
         });
+
+        beforeEach(function () {
+            clock = sinon.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+        });
+
+        afterEach(function () {
+            clock.restore();
+        });
+
         after(async function () {
             await configUtils.restore();
         });
@@ -166,16 +176,19 @@ describe('{{#recommendations}} helper', function () {
         it('should log an error and return safely if it hits the timeout threshold', async function () {
             configUtils.set('optimization:getHelper:timeout:threshold', 1);
 
-            const response = await recommendations.call(
+            const responsePromise = recommendations.call(
                 'recommendations'
             );
+            // 2 > threshold (1), < stub's 5 — fires only the helper's timer.
+            await clock.tickAsync(2);
+            const response = await responsePromise;
 
             // An error message is logged
-            logging.error.calledOnce.should.be.true();
+            sinon.assert.calledOnce(logging.error);
 
             // No HTML is rendered
-            response.should.be.an.Object().with.property('string');
-            response.string.should.equal('');
+            assert(response !== null && typeof response === 'object');
+            assert.equal(response.string, '');
         });
     });
 });

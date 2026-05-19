@@ -18,14 +18,14 @@ test.describe('Ghost Admin - i18n Newsletter', () => {
         const adminPublicationPage = new SettingsPage(page).publicationSection;
         await adminPublicationPage.goto();
         await adminPublicationPage.setLanguage('fr');
-        await expect(adminPublicationPage.languageField).toHaveValue('fr');
+        await expect(adminPublicationPage.localeSelect).toContainText('French (fr)');
 
         const postEditorPage = new PostEditorPage(page);
         await postEditorPage.gotoPost(post.id);
         await postEditorPage.previewButton.click();
-        await postEditorPage.previewModal.emailTabButton.click();
+        await postEditorPage.previewModal.switchToEmailTab();
 
-        const emailPreviewContent = await postEditorPage.previewModal.content();
+        const emailPreviewContent = await postEditorPage.previewModal.emailPreviewContent();
         expect(emailPreviewContent).toContain(`Par ${ghostAccountOwner.name}`);
         expect(emailPreviewContent).not.toContain(`By ${ghostAccountOwner.name}`);
     });

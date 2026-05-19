@@ -21,6 +21,7 @@ const routerManager = require('./frontend/services/routing').routerManager;
 const settingsCache = require('./shared/settings-cache');
 const urlService = require('./server/services/url');
 const routeSettings = require('./server/services/route-settings');
+const labs = require('./shared/labs');
 
 // Listen to settings.locale.edited, similar to the member service and models/base/listeners
 const events = require('./server/lib/common/events');
@@ -30,13 +31,32 @@ const messages = {
 };
 
 class Bridge {
+    constructor() {
+        // Track the previous state of the themeTranslation flag
+        this.previousThemeTranslationState = labs.isSet('themeTranslation');
+    }
+
     init() {
         /**
          * When locale changes, we reload theme translations
          */
         events.on('settings.locale.edited', (model) => {
-            debug('Active theme init18n');
+            debug('locale changed, updating i18n to', model.get('value'));
             this.getActiveTheme().initI18n({locale: model.get('value')});
+        });
+        
+        events.on('settings.labs.edited', () => {
+            const currentThemeTranslationState = labs.isSet('themeTranslation');
+            
+            if (currentThemeTranslationState !== this.previousThemeTranslationState) {
+                debug('themeTranslation flag changed from %s to %s', 
+                    this.previousThemeTranslationState, currentThemeTranslationState);
+                const locale = settingsCache.get('locale');
+                this.getActiveTheme().initI18n({locale});
+                
+                // Update the tracked state
+                this.previousThemeTranslationState = currentThemeTranslationState;
+            } 
         });
 
         // NOTE: eventually this event should somehow be listened on and handled by the URL Service
@@ -94,7 +114,7 @@ class Bridge {
 
         const routerConfig = {
             routeSettings: await routeSettings.loadRouteSettings(),
-            urlService
+            urlService: urlService.facade
         };
 
         await siteApp.reload(routerConfig);
@@ -102,12 +122,16 @@ class Bridge {
         // re-initialize apps (register app routers, because we have re-initialized the site routers)
         appService.init();
 
-        // connect routers and resources again
-        urlService.queue.start({
-            event: 'init',
-            tolerance: 100,
-            requiredSubscriberCount: 1
-        });
+        if (!urlService.facade.isLazy()) {
+            // connect routers and resources again. The lazy URL service has
+            // nothing to precompute, so this step (and the queue itself) is
+            // skipped in lazy mode.
+            urlService.queue.start({
+                event: 'init',
+                tolerance: 100,
+                requiredSubscriberCount: 1
+            });
+        }
     }
 }
 

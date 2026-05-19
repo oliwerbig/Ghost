@@ -1,7 +1,7 @@
 import {InfiniteData} from '@tanstack/react-query';
 import {Meta, createInfiniteQuery, createMutation, createQueryWithId} from '../utils/api/hooks';
-import {deleteFromQueryCache, updateQueryCache} from '../utils/api/updateQueries';
-import {usersDataType} from './currentUser';
+import {deleteFromQueryCache, updateQueryCache} from '../utils/api/update-queries';
+import {usersDataType} from './current-user';
 import {UserRole} from './roles';
 
 // Types
@@ -41,6 +41,7 @@ export type User = {
     recommendation_notifications: boolean;
     milestone_notifications: boolean;
     donation_notifications: boolean;
+    gift_subscription_notifications: boolean;
     roles: UserRole[];
     url: string;
 }

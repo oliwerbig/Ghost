@@ -11,13 +11,17 @@ test.describe('Ghost Public - Member Signup', () => {
         emailClient = new MailPit();
     });
 
+    async function retrieveLatestEmailMessage(emailAddress: string, timeoutMs: number = 10000) {
+        const messages = await emailClient.searchByRecipient(emailAddress, {timeoutMs: timeoutMs});
+        return await emailClient.getMessageDetailed(messages[0]);
+    }
+
     test('signed up with magic link in email', async ({page}) => {
         const homePage = new HomePage(page);
         await homePage.goto();
         const {emailAddress} = await signupViaPortal(page);
 
-        const messages = await emailClient.searchByRecipient(emailAddress);
-        const latestMessage = await emailClient.getMessageDetailed(messages[0]);
+        const latestMessage = await retrieveLatestEmailMessage(emailAddress);
         const emailTextBody = latestMessage.Text;
 
         const magicLink = extractMagicLink(emailTextBody);
@@ -28,12 +32,10 @@ test.describe('Ghost Public - Member Signup', () => {
         await expect(homePage.accountButton).toBeVisible();
     });
 
-    test('received welcome email', async ({page}) => {
+    test('received complete the signup email', async ({page}) => {
         await new HomePage(page).goto();
         const {emailAddress} = await signupViaPortal(page);
-
-        const messages = await emailClient.searchByRecipient(emailAddress);
-        const latestMessage = await emailClient.getMessageDetailed(messages[0]);
+        const latestMessage = await retrieveLatestEmailMessage(emailAddress);
         expect(latestMessage.Subject.toLowerCase()).toContain('complete');
 
         const emailTextBody = latestMessage.Text;

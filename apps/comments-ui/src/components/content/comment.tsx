@@ -1,23 +1,32 @@
 import EditForm from './forms/edit-form';
 import LikeButton from './buttons/like-button';
+import LikeCount from './buttons/like-count';
 import MoreButton from './buttons/more-button';
+import PinnedLabel from './pinned-label';
+import React, {useCallback} from 'react';
 import Replies, {RepliesProps} from './replies';
 import ReplyButton from './buttons/reply-button';
 import ReplyForm from './forms/reply-form';
+import ThreadedReplies from './threaded-replies';
 import {Avatar, BlankAvatar} from './avatar';
 import {Comment, OpenCommentForm, useAppContext} from '../../app-context';
 import {Transition} from '@headlessui/react';
-import {findCommentById, formatExplicitTime, getCommentInReplyToSnippet, getMemberNameFromComment} from '../../utils/helpers';
-import {useCallback} from 'react';
+import {buildCommentPermalink, findCommentById, formatExplicitTime, getCommentInReplyToSnippet, getMemberNameFromComment} from '../../utils/helpers';
 import {useRelativeTime} from '../../utils/hooks';
+
+type CommentLayoutVariant = 'root' | 'reply';
 
 type AnimatedCommentProps = {
     comment: Comment;
     parent?: Comment;
+    useThreading?: boolean;
+    layoutVariant?: CommentLayoutVariant;
+    isLastSibling?: boolean;
 };
 
-const AnimatedComment: React.FC<AnimatedCommentProps> = ({comment, parent}) => {
+const AnimatedComment: React.FC<React.PropsWithChildren<AnimatedCommentProps>> = ({children, comment, parent, useThreading, layoutVariant, isLastSibling}) => {
     const {commentsIsLoading} = useAppContext();
+
     return (
         <Transition
             className={`${commentsIsLoading ? 'animate-pulse' : ''}`}
@@ -25,21 +34,23 @@ const AnimatedComment: React.FC<AnimatedCommentProps> = ({comment, parent}) => {
             enter="transition-opacity duration-300 ease-out"
             enterFrom="opacity-0"
             enterTo="opacity-100"
-            id={comment.id}
             leave="transition-opacity duration-100"
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
             show={true}
             appear
         >
-            <CommentComponent comment={comment} parent={parent} />
+            <CommentComponent comment={comment} isLastSibling={isLastSibling} layoutVariant={layoutVariant} parent={parent} useThreading={useThreading}>
+                {children}
+            </CommentComponent>
         </Transition>
     );
 };
 
-export const CommentComponent: React.FC<CommentProps> = ({comment, parent}) => {
-    const {dispatchAction, admin} = useAppContext();
-    const {showDeletedMessage, showHiddenMessage, showCommentContent} = useCommentVisibility(comment, admin);
+export const CommentComponent: React.FC<CommentProps> = ({children, comment, parent, useThreading = false, layoutVariant = 'root', isLastSibling = false}) => {
+    const {dispatchAction, isAdmin} = useAppContext();
+    const hasNestedReplies = React.Children.count(children) > 0;
+    const {showDeletedMessage, showHiddenMessage, showCommentContent} = useCommentVisibility(comment, isAdmin, hasNestedReplies);
 
     const openEditMode = useCallback(() => {
         const newForm: OpenCommentForm = {
@@ -53,17 +64,35 @@ export const CommentComponent: React.FC<CommentProps> = ({comment, parent}) => {
     }, [comment.id, dispatchAction]);
 
     if (showDeletedMessage || showHiddenMessage) {
-        return <UnpublishedComment comment={comment} openEditMode={openEditMode} />;
+        return <UnpublishedComment comment={comment} isLastSibling={isLastSibling} layoutVariant={layoutVariant} openEditMode={openEditMode} parent={parent} useThreading={useThreading}>{children}</UnpublishedComment>;
     } else if (showCommentContent && !showHiddenMessage) {
-        return <PublishedComment comment={comment} openEditMode={openEditMode} parent={parent} />;
+        return <PublishedComment comment={comment} isLastSibling={isLastSibling} layoutVariant={layoutVariant} openEditMode={openEditMode} parent={parent} useThreading={useThreading}>{children}</PublishedComment>;
     }
 
     return null;
 };
 
-type CommentProps = AnimatedCommentProps;
-const useCommentVisibility = (comment: Comment, admin: boolean) => {
-    const hasReplies = comment.replies && comment.replies.length > 0;
+type CommentProps = React.PropsWithChildren<AnimatedCommentProps>;
+
+const getReplyFormDisplayState = (comment: Comment, openCommentForms: OpenCommentForm[], useThreading: boolean) => {
+    // Non-threaded replies to replies are displayed inside the top-level comment,
+    // so match either the comment id or parent id. Threaded replies render their
+    // own reply form inline, so only match the current comment.
+    const openForm = useThreading
+        ? openCommentForms.find(f => f.id === comment.id && f.type === 'reply')
+        : openCommentForms.find(f => (f.id === comment.id || f.parent_id === comment.id) && f.type === 'reply');
+
+    return {
+        openForm,
+        // Avoid showing nested reply forms in non-threaded RepliesContainer output.
+        displayReplyForm: useThreading
+            ? !!openForm
+            : !!openForm && (!openForm.parent_id || openForm.parent_id === comment.id)
+    };
+};
+
+const useCommentVisibility = (comment: Comment, admin: boolean, hasNestedReplies?: boolean) => {
+    const hasReplies = hasNestedReplies || (comment.replies && comment.replies.length > 0);
     const isDeleted = comment.status === 'deleted';
     const isHidden = comment.status === 'hidden';
 
@@ -79,23 +108,21 @@ const useCommentVisibility = (comment: Comment, admin: boolean) => {
 
 type PublishedCommentProps = CommentProps & {
     openEditMode: () => void;
+    useThreading: boolean;
 }
-const PublishedComment: React.FC<PublishedCommentProps> = ({comment, parent, openEditMode}) => {
-    const {dispatchAction, openCommentForms, admin, commentIdToHighlight} = useAppContext();
+const PublishedComment: React.FC<PublishedCommentProps> = ({children, comment, parent, openEditMode, useThreading, layoutVariant = 'root', isLastSibling = false}) => {
+    const {dispatchAction, openCommentForms, isAdmin, commentIdToHighlight, commentIdFromHash} = useAppContext();
+    const hasNestedReplies = React.Children.count(children) > 0;
 
     // Determine if the comment should be displayed with reduced opacity
-    const isHidden = admin && comment.status === 'hidden';
+    const isHidden = isAdmin && comment.status === 'hidden';
     const hiddenClass = isHidden ? 'opacity-30' : '';
 
     // Check if this comment is being edited
     const editForm = openCommentForms.find(openForm => openForm.id === comment.id && openForm.type === 'edit');
     const isInEditMode = !!editForm;
 
-    // currently a reply-to-reply form is displayed inside the top-level PublishedComment component
-    // so we need to check for a match of either the comment id or the parent id
-    const openForm = openCommentForms.find(f => (f.id === comment.id || f.parent_id === comment.id) && f.type === 'reply');
-    // avoid displaying the reply form inside RepliesContainer
-    const displayReplyForm = openForm && (!openForm.parent_id || openForm.parent_id === comment.id);
+    const {openForm, displayReplyForm} = getReplyFormDisplayState(comment, openCommentForms, useThreading);
     // only highlight the reply button for the comment that is being replied to
     const highlightReplyButton = !!(openForm && openForm.id === comment.id);
 
@@ -122,33 +149,45 @@ const PublishedComment: React.FC<PublishedCommentProps> = ({comment, parent, ope
         }
     }, [comment, parent, openForm, dispatchAction]);
 
-    const hasReplies = displayReplyForm || (comment.replies && comment.replies.length > 0);
+    const hasChildReplies = hasNestedReplies || (comment.replies && comment.replies.length > 0);
+    const hasReplies = displayReplyForm || hasChildReplies;
     const avatar = (<Avatar member={comment.member} />);
-
+    const replyFormParent = parent || comment;
+    const isHighlighted = commentIdFromHash
+        ? comment.id === commentIdFromHash && commentIdToHighlight === commentIdFromHash
+        : comment.id === commentIdToHighlight;
     return (
-        <CommentLayout avatar={avatar} className={hiddenClass} hasReplies={hasReplies} memberUuid={comment.member?.uuid}>
-            <div>
+        <CommentLayout
+            avatar={avatar}
+            className={hiddenClass}
+            hasReplies={hasReplies}
+            isLastSibling={isLastSibling}
+            isPinned={comment.pinned}
+            layoutVariant={layoutVariant}
+            memberUuid={comment.member?.uuid}
+            replies={<RepliesContainer comment={comment} parent={parent} useThreading={useThreading}>{children}</RepliesContainer>}
+            replyForm={displayReplyForm ? <ReplyFormBox continueLine={hasChildReplies} openForm={openForm} parent={replyFormParent} useThreading={useThreading} /> : null}
+            useThreading={useThreading}
+        >
+            <div id={comment.id}>
                 {isInEditMode ? (
                     <>
-                        <CommentHeader className={hiddenClass} comment={comment} />
+                        <CommentHeader className={hiddenClass} comment={comment} useThreading={useThreading} />
                         <EditForm comment={comment} openForm={editForm} parent={parent} />
                     </>
                 ) : (
                     <>
-                        <CommentHeader className={hiddenClass} comment={comment} />
-                        <CommentBody className={hiddenClass} html={comment.html} isHighlighted={comment.id === commentIdToHighlight} />
+                        <CommentHeader className={hiddenClass} comment={comment} useThreading={useThreading} />
+                        <CommentBody className={hiddenClass} html={comment.html} isHighlighted={isHighlighted} />
                         <CommentMenu
                             comment={comment}
                             highlightReplyButton={highlightReplyButton}
                             openEditMode={openEditMode}
                             openReplyForm={openReplyForm}
-                            parent={parent}
                         />
                     </>
                 )}
             </div>
-            <RepliesContainer comment={comment} />
-            {displayReplyForm && <ReplyFormBox comment={comment} openForm={openForm} />}
         </CommentLayout>
     );
 };
@@ -156,34 +195,47 @@ const PublishedComment: React.FC<PublishedCommentProps> = ({comment, parent, ope
 type UnpublishedCommentProps = {
     comment: Comment;
     openEditMode: () => void;
+    parent?: Comment;
+    useThreading: boolean;
+    layoutVariant?: CommentLayoutVariant;
+    isLastSibling?: boolean;
 }
-const UnpublishedComment: React.FC<UnpublishedCommentProps> = ({comment, openEditMode}) => {
-    const {admin, openCommentForms, t} = useAppContext();
+const UnpublishedComment: React.FC<React.PropsWithChildren<UnpublishedCommentProps>> = ({children, comment, openEditMode, parent, useThreading, layoutVariant = 'root', isLastSibling = false}) => {
+    const {isAdmin, openCommentForms, t} = useAppContext();
+    const hasNestedReplies = React.Children.count(children) > 0;
 
-    const avatar = (admin && comment.status !== 'deleted')
+    const avatar = (isAdmin && comment.status !== 'deleted')
         ? <Avatar member={comment.member} />
         : <BlankAvatar />;
-    const hasReplies = comment.replies && comment.replies.length > 0;
-
     const notPublishedMessage = comment.status === 'hidden' ?
         t('This comment has been hidden.') :
         comment.status === 'deleted' ?
             t('This comment has been removed.') :
             '';
 
-    // currently a reply-to-reply form is displayed inside the top-level PublishedComment component
-    // so we need to check for a match of either the comment id or the parent id
-    const openForm = openCommentForms.find(f => (f.id === comment.id || f.parent_id === comment.id) && f.type === 'reply');
-    // avoid displaying the reply form inside RepliesContainer
-    const displayReplyForm = openForm && (!openForm.parent_id || openForm.parent_id === comment.id);
+    const {openForm, displayReplyForm} = getReplyFormDisplayState(comment, openCommentForms, useThreading);
+    const hasChildReplies = hasNestedReplies || (comment.replies && comment.replies.length > 0);
+    const hasReplies = displayReplyForm || hasChildReplies;
 
     // Only show MoreButton for hidden (not deleted) comments when admin
-    const showMoreButton = admin && comment.status === 'hidden';
+    const showMoreButton = isAdmin && comment.status === 'hidden';
+
+    const replyFormParent = parent || comment;
 
     return (
-        <CommentLayout avatar={avatar} hasReplies={hasReplies}>
-            <div className="mt-[-3px] flex items-start">
+        <CommentLayout
+            avatar={avatar}
+            hasReplies={hasReplies}
+            isLastSibling={isLastSibling}
+            isPinned={comment.pinned}
+            layoutVariant={layoutVariant}
+            replies={<RepliesContainer comment={comment} parent={parent} useThreading={useThreading}>{children}</RepliesContainer>}
+            replyForm={displayReplyForm ? <ReplyFormBox continueLine={hasChildReplies} openForm={openForm} parent={replyFormParent} useThreading={useThreading} /> : null}
+            useThreading={useThreading}
+        >
+            <div className="mt-[-3px] flex items-start" id={comment.id}>
                 <div className="flex h-10 flex-row items-center gap-4 pb-[8px] pr-4">
+                    <PinnedLabel comment={comment} />
                     <p className="text-md mt-[4px] font-sans leading-normal text-neutral-900/40 sm:text-lg dark:text-white/60">
                         {notPublishedMessage}
                     </p>
@@ -194,8 +246,6 @@ const UnpublishedComment: React.FC<UnpublishedCommentProps> = ({comment, openEdi
                     )}
                 </div>
             </div>
-            <RepliesContainer comment={comment} />
-            {displayReplyForm && <ReplyFormBox comment={comment} openForm={openForm} />}
         </CommentLayout>
     );
 };
@@ -226,28 +276,55 @@ const EditedInfo: React.FC<{comment: Comment}> = ({comment}) => {
         </span>
     );
 };
-const RepliesContainer: React.FC<RepliesProps & {className?: string}> = ({comment, className = ''}) => {
-    const hasReplies = comment.replies && comment.replies.length > 0;
+
+const RepliesContainer: React.FC<React.PropsWithChildren<RepliesProps & {className?: string; parent?: Comment; useThreading?: boolean}>> = ({children, comment, className = '', parent, useThreading = false}) => {
+    const hasNestedReplies = React.Children.count(children) > 0;
+    const hasReplies = hasNestedReplies || (comment.replies && comment.replies.length > 0);
+    const shouldRenderThreadedReplies = useThreading && !parent;
 
     if (!hasReplies) {
         return null;
     }
 
     return (
-        <div className={`-ml-2 mb-4 mt-7 sm:mb-0 sm:mt-8 ${className}`}>
-            <Replies comment={comment} />
+        <div className={`${useThreading ? 'ml-8 flow-root sm:ml-9' : '-ml-2 mb-4 mt-7 sm:mb-0 sm:mt-8'} ${className}`}>
+            {hasNestedReplies ? children : shouldRenderThreadedReplies ? <ThreadedReplies comment={comment} useThreading={useThreading} /> : <Replies comment={comment} useThreading={useThreading} />}
         </div>
     );
 };
 
 type ReplyFormBoxProps = {
-    comment: Comment;
     openForm: OpenCommentForm;
+    parent: Comment;
+    useThreading: boolean;
+    continueLine?: boolean;
 };
-const ReplyFormBox: React.FC<ReplyFormBoxProps> = ({comment, openForm}) => {
+const ReplyFormBox: React.FC<ReplyFormBoxProps> = ({openForm, parent, useThreading, continueLine = false}) => {
+    if (!useThreading) {
+        return (
+            <div className="my-8 sm:my-10">
+                <ReplyForm openForm={openForm} parent={parent} />
+            </div>
+        );
+    }
+
+    const spacingClass = continueLine ? 'pb-8 sm:pb-10' : 'mb-8 sm:mb-10';
+
     return (
-        <div className="my-8 sm:my-10">
-            <ReplyForm openForm={openForm} parent={comment} />
+        <div className={`relative ml-8 sm:ml-9 ${spacingClass}`}>
+            {continueLine && (
+                <div
+                    className="pointer-events-none absolute inset-y-0 -left-4 w-px bg-neutral-300 sm:-left-5 dark:bg-neutral-700"
+                    data-testid="reply-form-continuation-line"
+                    aria-hidden
+                />
+            )}
+            <div
+                className="pointer-events-none absolute -left-4 top-0 h-4 w-3 border-b border-l border-neutral-300 [border-bottom-left-radius:12px_16px] sm:-left-5 sm:w-4 sm:[border-bottom-left-radius:16px_16px] dark:border-neutral-700"
+                data-testid="reply-form-elbow"
+                aria-hidden
+            />
+            <ReplyForm openForm={openForm} parent={parent} threadedLayout={true} />
         </div>
     );
 };
@@ -267,22 +344,8 @@ const AuthorName: React.FC<{comment: Comment}> = ({comment}) => {
 };
 
 export const RepliedToSnippet: React.FC<{comment: Comment}> = ({comment}) => {
-    const {comments, dispatchAction, t} = useAppContext();
+    const {comments, t, pageUrl} = useAppContext();
     const inReplyToComment = findCommentById(comments, comment.in_reply_to_id);
-
-    const scrollRepliedToCommentIntoView = (e: React.MouseEvent<HTMLAnchorElement>) => {
-        e.preventDefault();
-
-        if (!e.target) {
-            return;
-        }
-
-        const element = (e.target as HTMLElement).ownerDocument.getElementById(comment.in_reply_to_id);
-        if (element) {
-            dispatchAction('highlightComment', {commentId: comment.in_reply_to_id});
-            element.scrollIntoView({behavior: 'smooth', block: 'center'});
-        }
-    };
 
     let inReplyToSnippet = comment.in_reply_to_snippet;
     // For public API requests hidden/deleted comments won't exist in the comments array
@@ -292,40 +355,59 @@ export const RepliedToSnippet: React.FC<{comment: Comment}> = ({comment}) => {
     }
 
     const linkToReply = inReplyToComment && inReplyToComment.status === 'published';
-
     const className = 'font-medium text-neutral-900/60 break-all transition-colors dark:text-white/70';
+    const linkClassName = `${className} hover:text-neutral-900/75 dark:hover:text-white/85`;
+
+    if (!linkToReply) {
+        return <span className={className} data-testid="comment-in-reply-to">{inReplyToSnippet}</span>;
+    }
 
     return (
-        linkToReply
-            ? <a className={`${className} hover:text-neutral-900/75 dark:hover:text-white/85`} data-testid="comment-in-reply-to" href={`#${comment.in_reply_to_id}`} onClick={scrollRepliedToCommentIntoView}>{inReplyToSnippet}</a>
-            : <span className={className} data-testid="comment-in-reply-to">{inReplyToSnippet}</span>
+        <a className={linkClassName} data-testid="comment-in-reply-to" href={buildCommentPermalink(pageUrl, comment.in_reply_to_id)} target="_parent">{inReplyToSnippet}</a>
     );
 };
 
 type CommentHeaderProps = {
     comment: Comment;
     className?: string;
+    useThreading: boolean;
 }
 
-const CommentHeader: React.FC<CommentHeaderProps> = ({comment, className = ''}) => {
-    const {member, t} = useAppContext();
+const CommentHeader: React.FC<CommentHeaderProps> = ({comment, className = '', useThreading}) => {
+    const {member, t, pageUrl} = useAppContext();
     const createdAtRelative = useRelativeTime(comment.created_at);
     const memberExpertise = member && comment.member && comment.member.uuid === member.uuid ? member.expertise : comment?.member?.expertise;
-    const isReplyToReply = comment.in_reply_to_id && comment.in_reply_to_snippet;
+    const showReplyContext = !useThreading && comment.in_reply_to_id && comment.in_reply_to_snippet;
+
+    const timestampElement = (
+        <a
+            className="hover:underline"
+            href={buildCommentPermalink(pageUrl, comment.id)}
+            target="_parent"
+            title={formatExplicitTime(comment.created_at)}
+        >
+            <span className="mx-[0.3em]">·</span>{createdAtRelative}
+        </a>
+    );
 
     return (
         <>
-            <div className={`mt-0.5 flex flex-wrap items-start sm:flex-row ${memberExpertise ? 'flex-col' : 'flex-row'} ${isReplyToReply ? 'mb-0.5' : 'mb-2'} ${className}`}>
+            <div className={`mt-0.5 flex flex-wrap items-start sm:flex-row ${memberExpertise ? 'flex-col' : 'flex-row'} ${showReplyContext ? 'mb-0.5' : 'mb-2'} ${className}`}>
                 <AuthorName comment={comment} />
                 <div className="flex items-baseline pr-4 font-sans text-base leading-snug text-neutral-900/50 sm:text-sm dark:text-white/60">
                     <span>
                         <MemberExpertise comment={comment}/>
-                        <span title={formatExplicitTime(comment.created_at)}><span className="mx-[0.3em]">·</span>{createdAtRelative}</span>
+                        {timestampElement}
+                        {comment.pinned && (
+                            <span className="ml-2 inline-flex align-middle">
+                                <PinnedLabel comment={comment} />
+                            </span>
+                        )}
                         <EditedInfo comment={comment} />
                     </span>
                 </div>
             </div>
-            {(isReplyToReply &&
+            {(showReplyContext &&
                 <div className="mb-2 line-clamp-1 font-sans text-base leading-snug text-neutral-900/50 sm:text-sm dark:text-white/60">
                     <span>{t('Replied to')}</span>:&nbsp;<RepliedToSnippet comment={comment} />
                 </div>
@@ -368,7 +450,7 @@ const CommentBody: React.FC<CommentBodyProps> = ({html, className = '', isHighli
 
     return (
         <div className={`mt mb-2 flex flex-row items-center gap-4 pr-4 ${className}`}>
-            <p dangerouslySetInnerHTML={dangerouslySetInnerHTML} className="gh-comment-content text-md -mx-1 text-pretty rounded-md px-1 font-sans leading-normal text-neutral-900 [overflow-wrap:anywhere] sm:text-lg dark:text-white/85" data-testid="comment-content"/>
+            <div dangerouslySetInnerHTML={dangerouslySetInnerHTML} className="gh-comment-content text-md -mx-1 text-pretty rounded-md px-1 font-sans leading-normal text-neutral-900 [overflow-wrap:anywhere] sm:text-lg dark:text-white/85" data-testid="comment-content"/>
         </div>
     );
 };
@@ -378,40 +460,56 @@ type CommentMenuProps = {
     openReplyForm: () => void;
     highlightReplyButton: boolean;
     openEditMode: () => void;
-    parent?: Comment;
     className?: string;
 };
 const CommentMenu: React.FC<CommentMenuProps> = ({comment, openReplyForm, highlightReplyButton, openEditMode, className = ''}) => {
-    const {admin, t} = useAppContext();
+    const {member, t, isMember, isAdmin, isCommentingDisabled} = useAppContext();
 
-    if (admin && comment.status === 'hidden') {
+    const isPublished = comment.status === 'published';
+    const isOwnComment = member && comment.member?.uuid === member?.uuid;
+
+    // Visibility decisions
+    const showLikeButton = !isCommentingDisabled;
+    const showReplyButton = !isCommentingDisabled;
+    const shouldShowMoreButton = isAdmin || (isMember && isPublished);
+    const shouldHideMoreButton = isCommentingDisabled && isOwnComment;
+    const showMoreButton = shouldShowMoreButton && !shouldHideMoreButton;
+
+    if (isAdmin && comment.status === 'hidden') {
         return (
             <div className={`flex items-center gap-4 ${className}`}>
                 <span className="font-sans text-base leading-snug text-red-600 sm:text-sm">{t('Hidden for members')}</span>
-                {<MoreButton comment={comment} toggleEdit={openEditMode} />}
-            </div>
-        );
-    } else {
-        return (
-            <div className={`flex items-center gap-4 ${className}`}>
-                {<LikeButton comment={comment} />}
-                {<ReplyButton isReplying={highlightReplyButton} openReplyForm={openReplyForm} />}
-                {<MoreButton comment={comment} toggleEdit={openEditMode} />}
+                <MoreButton comment={comment} toggleEdit={openEditMode} />
             </div>
         );
     }
+
+    return (
+        <div className={`flex items-center gap-4 ${className}`}>
+            {showLikeButton
+                ? <LikeButton comment={comment} />
+                : <LikeCount count={comment.count.likes} liked={comment.liked} />
+            }
+            {showReplyButton && <ReplyButton isReplying={highlightReplyButton} openReplyForm={openReplyForm} />}
+            {showMoreButton && <MoreButton comment={comment} toggleEdit={openEditMode} />}
+        </div>
+    );
 };
 
 //
 // -- Layout --
 //
 
-const RepliesLine: React.FC<{hasReplies: boolean}> = ({hasReplies}) => {
+const RepliesLine: React.FC<{hasReplies: boolean; useThreading: boolean}> = ({hasReplies, useThreading}) => {
     if (!hasReplies) {
         return null;
     }
 
-    return (<div className="mb-2 h-full w-px grow rounded bg-gradient-to-b from-neutral-900/15 from-70% to-transparent dark:from-white/20 dark:from-70%" data-testid="replies-line" />);
+    if (!useThreading) {
+        return (<div className="mb-2 h-full w-px grow rounded bg-gradient-to-b from-neutral-900/15 from-70% to-transparent dark:from-white/20 dark:from-70%" data-testid="replies-line" />);
+    }
+
+    return (<div className="ml-4 h-full w-px grow self-start bg-neutral-300 dark:bg-neutral-700" data-testid="replies-line" />);
 };
 
 type CommentLayoutProps = {
@@ -420,19 +518,67 @@ type CommentLayoutProps = {
     hasReplies: boolean;
     className?: string;
     memberUuid?: string;
+    isLastSibling?: boolean;
+    isPinned?: boolean;
+    layoutVariant?: CommentLayoutVariant;
+    replies?: React.ReactNode;
+    replyForm?: React.ReactNode;
+    useThreading: boolean;
 }
-const CommentLayout: React.FC<CommentLayoutProps> = ({children, avatar, hasReplies, className = '', memberUuid = ''}) => {
-    return (
-        <div className={`flex w-full flex-row ${hasReplies === true ? 'mb-0' : 'mb-7'}`} data-member-uuid={memberUuid} data-testid="comment-component">
-            <div className="mr-2 flex flex-col items-center justify-start sm:mr-3">
-                <div className={`flex-0 mb-3 sm:mb-4 ${className}`}>
-                    {avatar}
+
+const COMMENT_GAP_CLASS_NAME = 'mb-7';
+const PINNED_COMMENT_GAP_CLASS_NAME = 'mb-4';
+const PINNED_COMMENT_BOX_CLASS_NAME = 'bg-amber-50/70 px-3 py-3 dark:bg-amber-400/10';
+
+const CommentLayout: React.FC<CommentLayoutProps> = ({children, avatar, hasReplies, className = '', memberUuid = '', isLastSibling = false, isPinned = false, layoutVariant = 'root', replies, replyForm, useThreading}) => {
+    const isReplyLayout = layoutVariant === 'reply';
+
+    if (!useThreading) {
+        const bottomMarginClassName = isPinned ? PINNED_COMMENT_GAP_CLASS_NAME : hasReplies ? 'mb-0' : COMMENT_GAP_CLASS_NAME;
+        return (
+            <div className={`flex w-full flex-row rounded-lg ${isPinned ? PINNED_COMMENT_BOX_CLASS_NAME : ''} ${bottomMarginClassName}`} data-member-uuid={memberUuid} data-pinned={isPinned ? 'true' : undefined} data-testid="comment-component">
+                <div className="mr-2 flex flex-col items-center justify-start sm:mr-3">
+                    <div className={`flex-0 mb-3 sm:mb-4 ${className}`}>
+                        {avatar}
+                    </div>
+                    <RepliesLine hasReplies={hasReplies} useThreading={useThreading} />
                 </div>
-                <RepliesLine hasReplies={hasReplies} />
+                <div className="grow">
+                    {children}
+                    {hasReplies && replies}
+                    {replyForm}
+                </div>
             </div>
-            <div className="grow">
-                {children}
+        );
+    }
+
+    return (
+        <div className={`relative flow-root ${hasReplies ? 'pb-4 sm:pb-0' : 'pb-7'}`}>
+            {isReplyLayout && !isLastSibling && (
+                <div
+                    className="pointer-events-none absolute inset-y-0 -left-4 w-px bg-neutral-300 sm:-left-5 dark:bg-neutral-700"
+                    aria-hidden
+                />
+            )}
+            {isReplyLayout && (
+                <div
+                    className="pointer-events-none absolute -left-4 top-0 h-4 w-3 border-b border-l border-neutral-300 [border-bottom-left-radius:12px_16px] sm:-left-5 sm:w-4 sm:[border-bottom-left-radius:16px_16px] dark:border-neutral-700"
+                    aria-hidden
+                />
+            )}
+            <div className="flex w-full flex-row" data-member-uuid={memberUuid} data-testid="comment-component">
+                <div className="mr-2 flex flex-col items-center justify-start sm:mr-3">
+                    <div className={`flex-0 mb-1 ${className}`}>
+                        {avatar}
+                    </div>
+                    <RepliesLine hasReplies={hasReplies} useThreading={useThreading} />
+                </div>
+                <div className={`grow ${hasReplies ? 'pb-7 sm:pb-8' : ''}`}>
+                    {children}
+                </div>
             </div>
+            {replyForm}
+            {hasReplies && replies}
         </div>
     );
 };

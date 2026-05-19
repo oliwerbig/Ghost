@@ -4,7 +4,7 @@ const {cacheInvalidateHeaderNotSet} = assertions;
 const {exportedBodyLatest} = require('../../utils/fixtures/export/body-generator');
 const fs = require('fs-extra');
 const sinon = require('sinon');
-const assert = require('assert/strict');
+const assert = require('node:assert/strict');
 
 describe('Backup Integration', function () {
     let agent, fsStub;
@@ -85,7 +85,7 @@ describe('Backup Integration', function () {
                         'content-disposition': stringMatching(/attachment; filename="members\./)
                     })
                     .expect(({text}) => {
-                        assert.match(text, /id,email,name,note,subscribed_to_emails,complimentary_plan,stripe_customer_id,created_at,deleted_at,labels,tiers/);
+                        assert.match(text, /id,email,name,note,subscribed_to_emails,complimentary_plan,stripe_customer_id,created_at,deleted_at,labels,tiers,gift_id/);
                     });
             });
         });
@@ -136,7 +136,7 @@ describe('Backup Integration', function () {
                         'content-disposition': stringMatching(/attachment; filename="members\./)
                     })
                     .expect(({text}) => {
-                        assert.match(text, /id,email,name,note,subscribed_to_emails,complimentary_plan,stripe_customer_id,created_at,deleted_at,labels,tiers/);
+                        assert.match(text, /id,email,name,note,subscribed_to_emails,complimentary_plan,stripe_customer_id,created_at,deleted_at,labels,tiers,gift_id/);
                     });
             });
         });
@@ -181,7 +181,7 @@ describe('Backup Integration', function () {
                         'content-disposition': stringMatching(/attachment; filename="members\./)
                     })
                     .expect(({text}) => {
-                        assert.match(text, /id,email,name,note,subscribed_to_emails,complimentary_plan,stripe_customer_id,created_at,deleted_at,labels,tiers/);
+                        assert.match(text, /id,email,name,note,subscribed_to_emails,complimentary_plan,stripe_customer_id,created_at,deleted_at,labels,tiers,gift_id/);
                     });
             });
         });
@@ -226,7 +226,7 @@ describe('Backup Integration', function () {
                         'content-disposition': stringMatching(/attachment; filename="members\./)
                     })
                     .expect(({text}) => {
-                        assert.match(text, /id,email,name,note,subscribed_to_emails,complimentary_plan,stripe_customer_id,created_at,deleted_at,labels,tiers/);
+                        assert.match(text, /id,email,name,note,subscribed_to_emails,complimentary_plan,stripe_customer_id,created_at,deleted_at,labels,tiers,gift_id/);
                     });
             });
         });

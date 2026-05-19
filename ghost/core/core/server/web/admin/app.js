@@ -23,10 +23,8 @@ module.exports = function setupAdminApp() {
     //        produced below should be split into separate 'Cache-Control' entry.
     //        For reference see: https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching#validation_2
 
-    const adminAssetsPath = path.join(config.getAdminAssetsPath(), 'assets');
-
     adminApp.use('/assets', serveStatic(
-        adminAssetsPath, {
+        path.join(config.get('paths').adminAssets, 'assets'), {
             // @NOTE: the maxAge config passed below are in milliseconds and the config
             //        is specified in seconds. See https://github.com/expressjs/serve-static/issues/150 for more context
             maxAge: config.get('caching:admin:maxAge') * 1000,
@@ -67,6 +65,11 @@ module.exports = function setupAdminApp() {
     // must happen AFTER asset loading and BEFORE routing
     adminApp.use(shared.middleware.urlRedirects.adminSSLAndHostRedirect);
 
+    // Deep-link redirect (e.g. /ghost/members/import -> /ghost/#/members/import).
+    // Must run BEFORE prettyUrls so the captured path doesn't pick up a trailing
+    // slash that React Router's hash routes don't match.
+    adminApp.use(redirectAdminUrls);
+
     // Add in all trailing slashes & remove uppercase
     // must happen AFTER asset loading and BEFORE routing
     adminApp.use(shared.middleware.prettyUrls);
@@ -74,9 +77,6 @@ module.exports = function setupAdminApp() {
     // Cache headers go last before serving the request
     // Admin is currently set to not be cached at all
     adminApp.use(shared.middleware.cacheControl('private'));
-
-    // Special redirects for the admin (these should have their own cache-control headers)
-    adminApp.use(redirectAdminUrls);
 
     // Finally, routing
     adminApp.get('*', require('./controller'));

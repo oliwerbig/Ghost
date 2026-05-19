@@ -1,5 +1,5 @@
 const models = require('../../models');
-const getPostServiceInstance = require('../../services/posts/posts-service');
+const getPostServiceInstance = require('../../services/posts/posts-service-instance');
 const postsService = getPostServiceInstance();
 
 /** @type {import('@tryghost/api-framework').Controller} */
@@ -15,7 +15,8 @@ const controller = {
                 filter: 'type:post',
                 limit: '10000',
                 order: 'updated_at DESC',
-                columns: ['id', 'slug', 'title', 'excerpt', 'url', 'updated_at', 'visibility']
+                columns: ['id', 'slug', 'title', 'excerpt', 'url', 'updated_at', 'visibility'],
+                withRelated: ['tags', 'authors']
             };
 
             return postsService.browsePosts(options);

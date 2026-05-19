@@ -1,48 +1,96 @@
 import CTABox from './cta-box';
 import Comment from './comment';
+import CommentingDisabledBox from './commenting-disabled-box';
 import ContentTitle from './content-title';
+import FocusedThread from './focused-thread';
 import MainForm from './forms/main-form';
 import Pagination from './pagination';
-import {ROOT_DIV_ID} from '../../utils/constants';
+import {DESKTOP_MAX_THREAD_DEPTH, MOBILE_BREAKPOINT, MOBILE_MAX_THREAD_DEPTH} from '../../utils/helpers';
+import {NavActionsContext} from '../../utils/nav-actions';
 import {SortingForm} from './forms/sorting-form';
+import {ThreadingContext} from '../../utils/threading-context';
+import {getFocusedThread} from '../../utils/thread-graph';
 import {useAppContext, useLabs} from '../../app-context';
-import {useEffect} from 'react';
+import {useCommentNavigation} from './hooks/use-comment-navigation';
+import {useEffect, useMemo, useRef, useState} from 'react';
+
+const MOBILE_MEDIA_QUERY = `(max-width: ${MOBILE_BREAKPOINT - 1}px)`;
+
+function getCurrentMaxThreadDepth() {
+    if (typeof window === 'undefined' || !window.matchMedia) {
+        return DESKTOP_MAX_THREAD_DEPTH;
+    }
+
+    return window.matchMedia(MOBILE_MEDIA_QUERY).matches ? MOBILE_MAX_THREAD_DEPTH : DESKTOP_MAX_THREAD_DEPTH;
+}
 
 const Content = () => {
     const labs = useLabs();
-    const {pagination, member, comments, commentCount, commentsEnabled, title, showCount, commentsIsLoading, t} = useAppContext();
+    const {pagination, comments, commentCount, title, showCount, commentsIsLoading, t, commentIdFromHash, showMissingCommentNotice, isMember, isPaidOnly, hasRequiredTier, isCommentingDisabled} = useAppContext();
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [maxThreadDepth, setMaxThreadDepth] = useState(() => getCurrentMaxThreadDepth());
 
     useEffect(() => {
-        const elem = document.getElementById(ROOT_DIV_ID);
-
-        // Check scroll position
-        if (elem && window.location.hash === `#ghost-comments`) {
-            // Only scroll if the user didn't scroll by the time we loaded the comments
-            // We could remove this, but if the network connection is slow, we risk having a page jump when the user already started scrolling
-            if (window.scrollY === 0) {
-                // This is a bit hacky, but one animation frame is not enough to wait for the iframe height to have changed and the DOM to be updated correctly before scrolling
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        elem.scrollIntoView();
-                    });
-                });
-            }
+        if (typeof window === 'undefined' || !window.matchMedia) {
+            return;
         }
+
+        const mql = window.matchMedia(MOBILE_MEDIA_QUERY);
+        const updateMaxThreadDepth = () => {
+            setMaxThreadDepth(mql.matches ? MOBILE_MAX_THREAD_DEPTH : DESKTOP_MAX_THREAD_DEPTH);
+        };
+
+        updateMaxThreadDepth();
+        mql.addEventListener('change', updateMaxThreadDepth);
+        return () => mql.removeEventListener('change', updateMaxThreadDepth);
     }, []);
 
-    const isPaidOnly = commentsEnabled === 'paid';
-    const isPaidMember = member && !!member.paid;
+    const threadingContext = useMemo(() => ({
+        maxThreadDepth
+    }), [maxThreadDepth]);
+
     const isFirst = pagination?.total === 0;
+    const canComment = isMember && hasRequiredTier && !isCommentingDisabled;
 
-    const commentsComponents = comments.slice().map(comment => <Comment key={comment.id} comment={comment} />);
+    // Explicit form/box visibility states
+    const showMainForm = canComment;
+    const showDisabledBox = !canComment && isCommentingDisabled;
+    const showCtaBox = !canComment && !isCommentingDisabled;
+    const useThreading = !!labs.commentsThreads;
+    const focusedThread = useMemo(() => (
+        useThreading ? getFocusedThread(comments, commentIdFromHash, maxThreadDepth) : null
+    ), [comments, commentIdFromHash, maxThreadDepth, useThreading]);
 
-    return (
+    const navActions = useCommentNavigation({
+        containerRef,
+        focusedThread
+    });
+
+    const commentsComponents = comments.map(comment => <Comment key={comment.id} comment={comment} useThreading={useThreading} />);
+
+    const content = focusedThread ? (
         <>
             <ContentTitle count={commentCount} showCount={showCount} title={title}/>
+            <div ref={containerRef} className={`z-10 transition-opacity duration-100 ${commentsIsLoading ? 'opacity-50' : ''}`} data-testid="comment-elements">
+                <FocusedThread focusedThread={focusedThread} />
+            </div>
+        </>
+    ) : (
+        <>
+            <ContentTitle count={commentCount} showCount={showCount} title={title}/>
+            {showMissingCommentNotice && (
+                <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 font-sans text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-100" data-testid="missing-comment-notice">
+                    {t('The linked comment is no longer available.')}
+                </div>
+            )}
             <div>
-                {(member && (isPaidMember || !isPaidOnly)) ? (
-                    <MainForm commentsCount={comments.length} />
-                ) : (
+                {showMainForm && <MainForm commentsCount={comments.length} />}
+                {showDisabledBox && (
+                    <section className="flex flex-col items-center py-6 sm:px-8 sm:py-10" data-testid="commenting-disabled-box">
+                        <CommentingDisabledBox />
+                    </section>
+                )}
+                {showCtaBox && (
                     <section className="flex flex-col items-center py-6 sm:px-8 sm:py-10" data-testid="cta-box">
                         <CTABox isFirst={isFirst} isPaid={isPaidOnly} />
                     </section>
@@ -55,7 +103,7 @@ const Content = () => {
                     </span>
                 </div>
             )}
-            <div className={`z-10 transition-opacity duration-100 ${commentsIsLoading ? 'opacity-50' : ''}`} data-testid="comment-elements">
+            <div ref={containerRef} className={`z-10 transition-opacity duration-100 ${commentsIsLoading ? 'opacity-50' : ''}`} data-testid="comment-elements">
                 {commentsComponents}
             </div>
             <Pagination />
@@ -63,6 +111,14 @@ const Content = () => {
                 labs?.testFlag ? <div data-testid="this-comes-from-a-flag" style={{display: 'none'}}></div> : null
             }
         </>
+    );
+
+    return (
+        <NavActionsContext.Provider value={navActions}>
+            <ThreadingContext.Provider value={threadingContext}>
+                {content}
+            </ThreadingContext.Provider>
+        </NavActionsContext.Provider>
     );
 };
 
