@@ -1,3 +1,4 @@
+// @ts-ignore
 import semverParse from 'semver/functions/parse';
 
 // Supported version formats:
