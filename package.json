@@ -65,6 +65,7 @@
   },
   "pnpm": {
     "overrides": {
+      "cron-validate": "1.4.5",
       "@tryghost/errors": "^1.3.7",
       "@tryghost/logging": "catalog:",
       "jackspeak": "2.3.6",
