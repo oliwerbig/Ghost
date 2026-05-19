@@ -8,7 +8,7 @@ on:
 
 env:
   FORCE_COLOR: 1
-  NODE_VERSION: 22.13.1
+  NODE_VERSION: 22.18.0
 
 jobs:
   build-and-deploy:
@@ -24,21 +24,26 @@ jobs:
           fetch-depth: 0
           submodules: true
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10.33.0
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'yarn'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build Ghost
         run: |
-          yarn build
+          pnpm build
           # Explicitly build ghost core (TypeScript and Assets) as it has no 'build' script
-          yarn workspace ghost run build:tsc
-          yarn workspace ghost run build:assets
+          pnpm --filter ghost run build:tsc
+          pnpm --filter ghost run build:assets
 
       - name: Create Release Package
         run: |

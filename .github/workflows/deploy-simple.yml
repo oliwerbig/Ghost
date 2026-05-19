@@ -13,7 +13,7 @@ on:
           - production
 
 env:
-  NODE_VERSION: 22.13.1
+  NODE_VERSION: 22.18.0
 
 jobs:
   deploy:
@@ -25,23 +25,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10.33.0
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'yarn'
+          cache: 'pnpm'
 
       - name: Install and build
         run: |
-          yarn install --frozen-lockfile
-          yarn build
+          pnpm install --frozen-lockfile
+          pnpm build
 
       - name: Create deployment package
         run: |
           mkdir deploy
 
           # Core files
-          cp -r ghost/core/{core,content,package.json,yarn.lock} deploy/
+          cp -r ghost/core/{core,content,package.json} deploy/
 
           # Built admin
           mkdir -p deploy/core/built
@@ -97,7 +102,7 @@ jobs:
 
           echo "Installing dependencies..."
           cd current
-          yarn install --production
+          npm install --omit=dev
 
           echo "Running migrations..."
           cd ..
