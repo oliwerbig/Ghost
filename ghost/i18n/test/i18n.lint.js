@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs/promises');
 const path = require('path');
 const {ESLint} = require('eslint');
-const {glob} = require('glob');
+const glob = require('glob');
 const {readFileSync, writeFileSync} = require('fs');
 
 const LOCALES_ROOT = path.join(__dirname, '..', 'locales');
@@ -375,7 +375,7 @@ function parseTranslationString(string) {
 }
 
 async function *getTranslationFiles() {
-    const globs = await glob(`${LOCALES_ROOT}/*/*.json`);
+    const globs = glob.sync(`${LOCALES_ROOT}/*/*.json`);
     for (const translationFile of globs) {
         yield translationFile;
     }
